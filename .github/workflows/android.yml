@@ -1,44 +1,40 @@
-name: Build Release APK
-
+name: Build APK
 on:
   workflow_dispatch:
+  push:
+    branches: [ "main" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'gradle'
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+      # GitHub runner 自带 Android SDK。不用 android-actions/setup-android@v3，
+      # 它跟 runner 预装的 cmdline-tools 16 不兼容（Failed to find package 'tools'）。
+      - name: Ensure Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-    - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v3
 
-    - run: gradle assembleRelease
+      - name: Build APKs (debug + release, no signing required)
+        run: ./gradlew assembleGenericDebug assembleGenericRelease --no-configuration-cache
 
-    - name: Sign app APK
-      id: sign_app
-      uses: ilharp/sign-android-release@nightly
-      with:
-        releaseDir: app/build/outputs/apk/release
-        signingKey: ${{ secrets.SIGNING_KEY }}
-        keyAlias: ${{ secrets.ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: signed-apks
-        path: app/build/outputs/apk/release/*-arm64-v8a-release-signed.apk
-        if-no-files-found: error
-        retention-days: 20
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: seal-apks
+          path: |
+            app/build/outputs/apk/generic/debug/*.apk
+            app/build/outputs/apk/generic/release/*.apk
+          if-no-files-found: error
+          retention-days: 20
